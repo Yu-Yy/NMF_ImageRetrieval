@@ -85,46 +85,56 @@ def main():
                     - s_hog.shape[0]) + (s_gist - In)/(np.sum(s_gist) - s_gist.shape[0]) + (s_color - In)/(np.sum(s_color) - s_color.shape[0]))
     Delta = np.diag(np.sum(W,axis=-1))
     # initialize the B and G, do the NMF
-    nmf_estimator = NMF(64)
-    Basic_M, Gain_matrix = nmf_estimator.fit_transform(S, W, Delta) # N * d  and d * N
-    projection_matrix = np.linalg.pinv(Basic_M.transpose() @ Basic_M) @ Basic_M.transpose()
-    # S is the pre decomposition matrix
-    # nmf_dc = dc.NMF(n_components=50,init='nndsvda', tol=5e-3, max_iter=1000) # the different came from the NMF initialization
-    # trainned_base = nmf_estimator.fit_transform(S.transpose())
+    n_components = [10,25,36,64,80,100,150,200]
+    ACC_C = []
+    for n_c in n_components:
+        nmf_estimator = NMF(n_c)
+        Basic_M, Gain_matrix = nmf_estimator.fit_transform(S, W, Delta) # N * d  and d * N
+        projection_matrix = np.linalg.pinv(Basic_M.transpose() @ Basic_M) @ Basic_M.transpose()
+        # S is the pre decomposition matrix
+        # nmf_dc = dc.NMF(n_components=50,init='nndsvda', tol=5e-3, max_iter=1000) # the different came from the NMF initialization
+        # trainned_base = nmf_estimator.fit_transform(S.transpose())
 
-    acc5 = 0
-    acc1 = 0
-    results_image = {'pre':[],'GT':[]}
-    for idx in tqdm(range(test_length)):
-        LBP_feature, HOG_feature, gist_feature, color_feature,label= test_dataset.__getitem__(idx)
-        s_lbp = np.exp(-get_distance_single(LBP_feature,LBP_collect)/(2*lbp_median))
-        s_hog = np.exp(-get_distance_single(HOG_feature,HOG_collect)/(2*hog_median))
-        s_gist = np.exp(-get_distance_single(gist_feature,gist_collect)/(2*gist_median))
-        s_color = np.exp(-get_distance_single(color_feature,color_collect)/(2*color_median))
-        s_test = (s_lbp+s_hog+s_gist+s_color)/4
-        s_low_dim = projection_matrix @ s_test # d * 1
-        # s_low_dim = nmf_dc.transform(s_test)
-        distance_s = np.sum((s_low_dim.transpose() - Gain_matrix) ** 2, axis=-1)
-        idx_sort = np.argsort(distance_s)
-        idx_top5 = idx_sort[:5]
-        pred_label = train_label[idx_top5]
-        results_image['pre'].append(pred_label)
-        results_image['GT'].append(label)
-        if label in pred_label: #TODO: text need to be further index
-            acc5 = acc5 + 1
-        if label == pred_label[0]:
-            acc1 = acc1 + 1
+        acc5 = 0
+        acc1 = 0
+        results_image = {'pre':[],'GT':[]}
+        for idx in tqdm(range(test_length)):
+            LBP_feature, HOG_feature, gist_feature, color_feature,label= test_dataset.__getitem__(idx)
+            s_lbp = np.exp(-get_distance_single(LBP_feature,LBP_collect)/(2*lbp_median))
+            s_hog = np.exp(-get_distance_single(HOG_feature,HOG_collect)/(2*hog_median))
+            s_gist = np.exp(-get_distance_single(gist_feature,gist_collect)/(2*gist_median))
+            s_color = np.exp(-get_distance_single(color_feature,color_collect)/(2*color_median))
+            s_test = (s_lbp+s_hog+s_gist+s_color)/4
+            s_low_dim = projection_matrix @ s_test # d * 1
+            # s_low_dim = nmf_dc.transform(s_test)
+            distance_s = np.sum((s_low_dim.transpose() - Gain_matrix) ** 2, axis=-1)
+            idx_sort = np.argsort(distance_s)
+            idx_top5 = idx_sort[:5]
+            pred_label = train_label[idx_top5]
+            results_image['pre'].append(pred_label)
+            results_image['GT'].append(label)
+            if label in pred_label: #TODO: text need to be further index
+                acc5 = acc5 + 1
+            if label == pred_label[0]:
+                acc1 = acc1 + 1
 
 
-    with open('./results/augment_nmf.pkl', 'wb') as f:
-        pickle.dump(results_image,f)
+        with open(f'./results/augment_nmf_n_c_{n_c}.pkl', 'wb') as f:
+            pickle.dump(results_image,f)
 
-    acc_rate5 = acc5 / test_length
-    acc_rate1 = acc1 / test_length
-    print('----------------------------')
-    # print(f"err = {err_rate:.4f}")
-    print(f"acc1 = {acc_rate1:.4f}")
-    print(f"acc5 = {acc_rate5:.4f}")
+        acc_rate5 = acc5 / test_length
+        acc_rate1 = acc1 / test_length
+        ACC_C.append(acc_rate1)
+        print('----------------------------')
+        # print(f"err = {err_rate:.4f}")
+        print(f"acc1 = {acc_rate1:.4f}")
+        print(f"acc5 = {acc_rate5:.4f}")
+    
+    fig = plt.figure()
+    plt.plot(n_components, ACC_C)
+    plt.xlabel(f'n_components')
+    plt.ylabel(f'Top1-Accuracy')
+    plt.savefig(f'nmf_c_results.png')
 
 
 if __name__ == '__main__':
